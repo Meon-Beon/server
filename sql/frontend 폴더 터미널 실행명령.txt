@@ -1,0 +1,17 @@
+frontend 폴더 터미널 실행명령
+npm install
+npm install react-router-dom axios
+
+server 폴더 터미널 실행명령
+
+python -m venv venv
+venv\Scripts\activate
+pip install "fastapi[standard]"
+pip freeze > requirements.txt
+
+프론트 실행 명령어
+npm run dev
+
+서버 실행 명령어
+pip install -r requirements.txt
+fastapi dev app/main.py
