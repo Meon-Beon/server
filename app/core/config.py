@@ -16,3 +16,8 @@ DATABASE_URL = URL.create(
     database=os.getenv("DB_NAME", "gene_insurance"),
     query={"charset": "utf8mb4"},
 )
+
+# 토스페이먼츠 시크릿 키 (결제 승인 API용, 서버에서만 사용)
+# .env에 TOSS_SECRET_KEY가 없으면 토스 문서 공개용 테스트 키를 쓴다.
+# 프론트의 클라이언트 키(test_gck_docs_...)와 같은 세트여야 승인이 된다
+TOSS_SECRET_KEY = os.getenv("TOSS_SECRET_KEY", "test_gsk_docs_OaPz8L5KdmQXkzRz3y47BMw6")
