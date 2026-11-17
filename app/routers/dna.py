@@ -13,8 +13,8 @@ from app.database import get_db
 router = APIRouter(prefix="/api/dna", tags=["dna"])
 
 # 상품 정보는 서버가 정한다. 프론트에서 보낸 금액은 조작될 수 있기 때문
-PRODUCT_NAME = "DTC 유전자 96종 종합 분석 키트 + 리포트"
-PRODUCT_PRICE = 50_000
+PRODUCT_NAME = "DTC 유전자 88종 종합 분석 키트 + 리포트"
+PRODUCT_PRICE = 80_000
 
 TOSS_CONFIRM_URL = "https://api.tosspayments.com/v1/payments/confirm"
 
