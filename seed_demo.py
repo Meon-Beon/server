@@ -53,7 +53,33 @@ def save_demo_data(conn, login_id: str, data: dict) -> int:
     user_id = report.save_report(conn, login_id, data["report"])
     existing.save_products(conn, login_id, data["owned"])
     design.save(conn, login_id, data["recs"], data["gaps"])
+    save_demo_order(conn, user_id, login_id)
     return user_id
+
+
+def save_demo_order(conn, user_id: int, login_id: str) -> None:
+    """마이페이지 결제 내역에 보일 DNA 검사 결제 1건 (실제 결제가 아닌 시연용. 다시 넣으면 바꿔 넣음)"""
+    from sqlalchemy import text
+
+    from app.routers.dna import PRODUCT_NAME, PRODUCT_PRICE
+
+    order_id = f"demo_{login_id}"[:64]
+    conn.execute(text("DELETE FROM dna_orders WHERE order_id = :order_id"), {"order_id": order_id})
+    conn.execute(
+        text(
+            """
+            INSERT INTO dna_orders (order_id, user_id, order_name, amount, status, method, approved_at)
+            VALUES (:order_id, :user_id, :order_name, :amount, 'DONE', '카드', :approved_at)
+            """
+        ),
+        {
+            "order_id": order_id,
+            "user_id": user_id,
+            "order_name": PRODUCT_NAME,
+            "amount": PRODUCT_PRICE,
+            "approved_at": "2026-11-16 14:23:00",
+        },
+    )
 
 
 def main() -> None:
@@ -79,6 +105,7 @@ def main() -> None:
     print(f"  - 보유 보험     상품 {len(data['owned'])}개 · 보장 {sum(len(p['coverages']) for p in data['owned'])}개")
     print(f"  - 추천 보험     상품 {len(data['recs'])}개 · 보장 {sum(len(p['coverages']) for p in data['recs'])}개")
     print(f"  - 보장 공백     질병 {len(data['gaps'])}개")
+    print("  - 결제 내역     DNA 검사 1건 (시연용)")
 
 
 if __name__ == "__main__":
