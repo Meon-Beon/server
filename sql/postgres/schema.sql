@@ -13,7 +13,7 @@
 --
 -- 다시 실행하면 모든 테이블을 지우고 새로 만든다 (데이터도 지워짐) → 다시 넣으려면 python seed_demo.py
 
-DROP TABLE IF EXISTS user_recommendation_coverage, user_recommendation, user_coverage_gap,
+DROP TABLE IF EXISTS user_saved_design, user_recommendation_coverage, user_recommendation, user_coverage_gap,
     user_insurance_feature, user_insurance_coverage, user_insurance,
     report_diseases, health_checkups, dna_orders, users CASCADE;
 
@@ -33,9 +33,11 @@ CREATE TABLE users (
     created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 
--- 테스트 계정 1234 / 1234 (비밀번호는 해시로 저장. 로그인 때 입력하는 값은 1234)
-INSERT INTO users (login_id, password, name)
-VALUES ('1234', 'pbkdf2_sha256$600000$79effd27ecba3e5a51ec6e696407491e$fe3e66dd3b483fcc3fba16b80a414392c5b7f72a10946a48f04865f081751ebb', '테스트');
+-- 테스트 계정 1234 / 1234 = 시연 인물 김재필 (비밀번호는 해시로 저장. 로그인 때 입력하는 값은 1234)
+-- 생년월일·성별·휴대폰은 건강검진 시연 데이터(health_checkups_data.sql)와 같은 값
+INSERT INTO users (login_id, password, name, birth_date, gender, phone)
+VALUES ('1234', 'pbkdf2_sha256$600000$79effd27ecba3e5a51ec6e696407491e$fe3e66dd3b483fcc3fba16b80a414392c5b7f72a10946a48f04865f081751ebb',
+        '김재필', '1981-09-26', 'M', '01012341234');
 
 -- ---------- DNA 검사 결제 주문 (dna_payment.sql) ----------
 CREATE TABLE dna_orders (
@@ -165,6 +167,15 @@ CREATE TABLE user_coverage_gap (
     CONSTRAINT uq_user_coverage_gap UNIQUE (user_id, disease)
 );
 
+-- ---------- 저장한 보험 설계 (회원당 1개, 저장하면 덮어씀. 마이페이지에서 보여 줌) ----------
+CREATE TABLE user_saved_design (
+    user_id           INT       NOT NULL REFERENCES users (id),
+    recommendation_id INT       NOT NULL REFERENCES user_recommendation (id) ON DELETE CASCADE,
+    sort_order        SMALLINT  NOT NULL,
+    saved_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, recommendation_id)
+);
+
 -- ---------- 보안: Supabase 공개 API(Data API) 로 테이블이 노출되지 않게 ----------
 -- Supabase 는 public 스키마 테이블을 브라우저용 REST API 로 자동 공개한다.
 -- RLS(행 단위 보안)를 켜고 정책을 하나도 만들지 않으면 그 API 로는 아무것도 읽고 쓸 수 없다.
@@ -179,3 +190,4 @@ ALTER TABLE user_insurance_feature       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_recommendation          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_recommendation_coverage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_coverage_gap            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_saved_design            ENABLE ROW LEVEL SECURITY;

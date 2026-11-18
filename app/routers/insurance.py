@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import Connection, text
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import Connection, bindparam, text
 
 from app.database import get_db
 
@@ -171,3 +172,97 @@ def get_insurance_design(user_id: int, db: Connection = Depends(get_db)):
     ]
 
     return {"recommendations": recs, "gaps": gaps}
+
+
+# ---------- 저장한 보험 설계 (회원당 1개, 저장하면 덮어씀) ----------
+def load_saved_design(db: Connection, user_id: int) -> dict:
+    """저장한 설계의 상품(설계 칸에 담은 순서)과 보장, 월 보험료 합계"""
+    rows = [
+        dict(r)
+        for r in db.execute(
+            text(
+                """
+                SELECT r.id, r.rec_rank, r.company_name, r.product_name, r.premium,
+                       r.target_diseases, r.join_url, s.saved_at
+                FROM user_saved_design s
+                JOIN user_recommendation r ON r.id = s.recommendation_id
+                WHERE s.user_id = :user_id
+                ORDER BY s.sort_order
+                """
+            ),
+            {"user_id": user_id},
+        ).mappings()
+    ]
+    by_id = {}
+    for r in rows:
+        r["target_diseases"] = [d.strip() for d in (r["target_diseases"] or "").split("/") if d.strip()]
+        r["coverages"] = []
+        by_id[r["id"]] = r
+
+    if by_id:
+        coverages = db.execute(
+            text(
+                """
+                SELECT recommendation_id, coverage_name, coverage_amount
+                FROM user_recommendation_coverage
+                WHERE recommendation_id IN :ids
+                ORDER BY recommendation_id, sort_order
+                """
+            ).bindparams(bindparam("ids", expanding=True)),  # IN (…) 에 리스트를 넣을 때
+            {"ids": list(by_id)},
+        ).mappings()
+        for c in coverages:
+            item = dict(c)
+            by_id[item.pop("recommendation_id")]["coverages"].append(item)
+
+    saved_at = max((r.pop("saved_at") for r in rows), default=None)
+    return {
+        "saved_at": saved_at,
+        "total_premium": sum(r["premium"] or 0 for r in rows),
+        "products": rows,
+    }
+
+
+@router.get("/saved/{user_id}")
+def get_saved_design(user_id: int, db: Connection = Depends(get_db)):
+    """마이페이지 > 보험 설계 보러가기, 보험설계 화면을 다시 열 때 저장한 조합 불러오기. 없으면 빈 목록"""
+    # TODO: JWT가 생기면 경로의 user_id 대신 토큰의 회원 id를 쓰기
+    return load_saved_design(db, user_id)
+
+
+class SaveDesignRequest(BaseModel):
+    # 설계 칸에 담은 순서대로. 빈 목록이면 저장한 설계를 비움
+    recommendation_ids: list[int] = Field(default_factory=list, max_length=20)
+
+
+@router.put("/saved/{user_id}")
+def save_design(user_id: int, body: SaveDesignRequest, db: Connection = Depends(get_db)):
+    ids = list(dict.fromkeys(body.recommendation_ids))  # 순서는 지키고 중복만 제거
+
+    # 다른 회원의 추천 상품 id 를 섞어 보내는 것을 막는다
+    if ids:
+        mine = set(
+            db.execute(
+                text("SELECT id FROM user_recommendation WHERE user_id = :user_id AND id IN :ids").bindparams(
+                    bindparam("ids", expanding=True)
+                ),
+                {"user_id": user_id, "ids": ids},
+            ).scalars()
+        )
+        if mine != set(ids):
+            raise HTTPException(status_code=400, detail="저장할 수 없는 상품이 포함돼 있어요. 화면을 새로고침해 주세요.")
+
+    # 덮어쓰기: 지우고 새로 넣기를 한 트랜잭션으로 (중간에 실패하면 예전 설계가 그대로 남음)
+    db.execute(text("DELETE FROM user_saved_design WHERE user_id = :user_id"), {"user_id": user_id})
+    if ids:
+        db.execute(
+            text(
+                """
+                INSERT INTO user_saved_design (user_id, recommendation_id, sort_order)
+                VALUES (:user_id, :rid, :sort_order)
+                """
+            ),
+            [{"user_id": user_id, "rid": rid, "sort_order": i} for i, rid in enumerate(ids, start=1)],
+        )
+    db.commit()
+    return load_saved_design(db, user_id)

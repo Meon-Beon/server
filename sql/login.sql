@@ -16,7 +16,7 @@ CREATE TABLE users (
 
 -- 테스트 계정 넣기
 INSERT INTO users (login_id, password, name)
-VALUES ('1234', '1234', '테스트');
+VALUES ('1234', '1234', '김재필');  -- 시연 인물
 
 -- 로그인 확인 쿼리
 SELECT id, login_id, name

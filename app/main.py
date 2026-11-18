@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import CORS_ORIGINS
 
-from app.routers import auth, dna, health, insurance, kakao, report
+from app.routers import auth, dna, health, insurance, kakao, me, report
 
 app = FastAPI()
 
@@ -19,6 +19,7 @@ app.include_router(dna.router)
 app.include_router(health.router)
 app.include_router(insurance.router)
 app.include_router(kakao.router)
+app.include_router(me.router)
 app.include_router(report.router)
 
 

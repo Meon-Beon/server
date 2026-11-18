@@ -9,6 +9,7 @@
 -- 다시 실행하면 세 테이블을 지우고 새로 만든다 (들어 있던 데이터도 지워짐)
 USE gene_insurance;
 
+DROP TABLE IF EXISTS user_saved_design;            -- 추천 상품을 참조하므로 가장 먼저
 DROP TABLE IF EXISTS user_recommendation_coverage;
 DROP TABLE IF EXISTS user_recommendation;
 DROP TABLE IF EXISTS user_coverage_gap;
@@ -63,4 +64,18 @@ CREATE TABLE user_coverage_gap (
     created_at      DATETIME     DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_coverage_gap (user_id, disease),
     CONSTRAINT fk_user_coverage_gap_user FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- 회원이 보험설계 화면에서 "설계 저장"한 추천 상품 (회원당 설계 1개, 저장하면 덮어씀)
+-- 마이페이지 > 보험 설계 보러가기 에서 보여 준다
+-- 추천 상품을 다시 적재(import_insurance_design.py / seed_demo.py)하면 CASCADE 로 저장한 설계도 지워진다
+CREATE TABLE user_saved_design (
+    user_id           INT      NOT NULL,          -- users.id
+    recommendation_id INT      NOT NULL,          -- user_recommendation.id
+    sort_order        TINYINT  NOT NULL,          -- 설계 칸에 담은 순서
+    saved_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, recommendation_id),
+    CONSTRAINT fk_user_saved_design_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT fk_user_saved_design_rec FOREIGN KEY (recommendation_id)
+        REFERENCES user_recommendation (id) ON DELETE CASCADE
 );
