@@ -9,7 +9,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import IntegrityError
 
-from app.database import get_db
+from app.database import get_db, insert_returning_id
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -187,7 +187,8 @@ def signup(body: SignupRequest, db: Connection = Depends(get_db)):
         """
     )
     try:
-        result = db.execute(
+        new_id = insert_returning_id(
+            db,
             query,
             {
                 "login_id": body.login_id,
@@ -208,4 +209,4 @@ def signup(body: SignupRequest, db: Connection = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=409, detail="이미 사용 중인 아이디입니다.") from None
 
-    return {"id": result.lastrowid, "login_id": body.login_id, "name": body.name}
+    return {"id": new_id, "login_id": body.login_id, "name": body.name}

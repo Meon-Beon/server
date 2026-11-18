@@ -23,6 +23,8 @@ from pathlib import Path
 
 from sqlalchemy import Connection, text
 
+from app.database import insert_returning_id
+
 LONGFORM = "추천보험_longform.csv"
 RECOMMENDATIONS = "insurance_recommendations.csv"
 GAPS = "insurance_coverage_gaps.csv"
@@ -208,7 +210,7 @@ def save(conn: Connection, login_id: str, products: list[dict], gaps: list[dict]
 
     for p in products:
         row = {k: v for k, v in p.items() if k != "coverages"}
-        rec_id = conn.execute(INSERT_REC, {**row, "user_id": user_id}).lastrowid  # 방금 넣은 행의 id
+        rec_id = insert_returning_id(conn, INSERT_REC, {**row, "user_id": user_id})  # 방금 넣은 행의 id
         conn.execute(INSERT_COVERAGE, [{**c, "recommendation_id": rec_id} for c in p["coverages"]])
 
     conn.execute(INSERT_GAP, [{**g, "user_id": user_id} for g in gaps])

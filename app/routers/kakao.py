@@ -32,7 +32,7 @@ from app.core.config import (
     KAKAO_REDIRECT_URI,
     KAKAO_REST_API_KEY,
 )
-from app.database import get_db
+from app.database import get_db, insert_returning_id
 from app.routers.auth import PHONE_RULE, LoginResponse, parse_rrn
 from app.services.demo_seed import seed_if_demo
 
@@ -185,13 +185,12 @@ def kakao_signup(body: KakaoSignupRequest, db: Connection = Depends(get_db)):
 
     login_id = f"kakao_{kakao_id}"
     try:
-        result = db.execute(
-            text(
-                """
-                INSERT INTO users (login_id, kakao_id, password, name, birth_date, gender, phone)
-                VALUES (:login_id, :kakao_id, NULL, :name, :birth_date, :gender, :phone)
-                """
-            ),
+        new_id = insert_returning_id(
+            db,
+            """
+            INSERT INTO users (login_id, kakao_id, password, name, birth_date, gender, phone)
+            VALUES (:login_id, :kakao_id, NULL, :name, :birth_date, :gender, :phone)
+            """,
             {
                 "login_id": login_id,
                 "kakao_id": kakao_id,
@@ -216,4 +215,4 @@ def kakao_signup(body: KakaoSignupRequest, db: Connection = Depends(get_db)):
 
     # 김재필(1981-09-26, 남)으로 가입하면 미리 만들어 둔 시연 데이터를 바로 연결 (가입이 commit 된 뒤 따로 처리)
     seed_if_demo(db, login_id, body.name, birth_date, gender)
-    return {"id": result.lastrowid, "login_id": login_id, "name": body.name}
+    return {"id": new_id, "login_id": login_id, "name": body.name}

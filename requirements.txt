@@ -5,3 +5,4 @@ SQLAlchemy>=2.0            # DB 연결·쿼리
 PyMySQL>=1.1               # MySQL 드라이버 (mysql+pymysql)
 cryptography>=42           # MySQL 8 기본 로그인 방식(caching_sha2_password)에 필요
 python-dotenv>=1.0         # server/.env 읽기
+psycopg[binary]>=3.2      # PostgreSQL 드라이버 (배포: Supabase)

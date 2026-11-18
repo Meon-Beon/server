@@ -1,13 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import CORS_ORIGINS
+
 from app.routers import auth, dna, health, insurance, kakao, report
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,  # .env 의 CORS_ORIGINS (기본: 로컬 프론트)
     allow_methods=["*"],
     allow_headers=["*"],
 )
