@@ -14,6 +14,7 @@
     new_try/portfolio_output/<참가자>/추천보험_longform.csv 외 2개                        → 추천·공백
 - 세 가지를 하나의 트랜잭션으로 넣는다. 하나라도 실패하면 아무것도 바뀌지 않는다 (반쯤 들어간 상태가 생기지 않음)
 - 같은 회원으로 다시 실행하면 그 회원의 기존 데이터를 지우고 새로 넣는다
+- 카카오 첫 가입 때 시연 인물과 정보가 같으면 서버가 load_demo_data / save_demo_data 를 불러 자동으로 넣는다
 - 실제 저장 로직은 import_report.py / import_existing_insurance.py / import_insurance_design.py 의 함수를 그대로 쓴다
 """
 from __future__ import annotations
@@ -31,6 +32,30 @@ import import_report as report
 SERVER_DIR = Path(__file__).resolve().parent  # 어느 폴더에서 실행해도 server 기준으로 파일을 찾게
 
 
+def load_demo_data(participant: str = "hu4BE6F2", output: str = "new_try/portfolio_output",
+                   existing_csv: str = "new_try/existing_insurance.csv") -> dict:
+    """시연 데이터 파일을 전부 읽고 검사한다 (DB 는 건드리지 않음). 틀리면 ValueError"""
+    folder = SERVER_DIR / output / participant
+    report_rows = report.read_rows(folder / "health_portfolio_long.csv")
+    owned = existing.read_products(SERVER_DIR / existing_csv)
+    found, recs = design.read_products(folder)
+    gaps = design.read_gaps(folder, found)
+
+    # 세 파일이 같은 사람의 것인지 확인 (다른 사람 데이터가 섞여 들어가는 실수 방지)
+    people = {"리포트": report_rows[0]["participant"], "보유 보험": owned[0]["participant"], "추천·공백": found}
+    if len(set(people.values())) != 1 or found != participant:
+        raise ValueError(f"참가자 코드가 서로 다릅니다: {people} (지정: {participant})")
+    return {"participant": found, "report": report_rows, "owned": owned, "recs": recs, "gaps": gaps}
+
+
+def save_demo_data(conn, login_id: str, data: dict) -> int:
+    """읽어 둔 시연 데이터를 login_id 회원에게 저장하고 users.id 를 돌려준다 (commit 은 호출한 쪽에서)"""
+    user_id = report.save_report(conn, login_id, data["report"])
+    existing.save_products(conn, login_id, data["owned"])
+    design.save(conn, login_id, data["recs"], data["gaps"])
+    return user_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="시연 데이터(리포트·보유 보험·추천·공백)를 한 번에 DB에 넣기")
     parser.add_argument("login_id", nargs="?", default="1234", help="데이터를 연결할 회원 아이디 (기본 1234)")
@@ -39,38 +64,21 @@ def main() -> None:
     parser.add_argument("--existing", default="new_try/existing_insurance.csv", help="보유 보험 CSV")
     args = parser.parse_args()
 
-    folder = SERVER_DIR / args.output / args.participant
-    existing_csv = SERVER_DIR / args.existing
-
     # 1) 먼저 파일만 전부 읽고 검사한다. 여기서 틀리면 DB에는 접속도 하지 않음
-    print(f"파일 확인 중: {folder.relative_to(SERVER_DIR)}")
-    report_rows = report.read_rows(folder / "health_portfolio_long.csv")
-    owned = existing.read_products(existing_csv)
-    participant, recs = design.read_products(folder)
-    gaps = design.read_gaps(folder, participant)
-
-    # 세 파일이 같은 사람의 것인지 확인 (다른 사람 데이터가 섞여 들어가는 실수 방지)
-    people = {
-        "리포트": report_rows[0]["participant"],
-        "보유 보험": owned[0]["participant"],
-        "추천·공백": participant,
-    }
-    if len(set(people.values())) != 1 or participant != args.participant:
-        raise ValueError(f"참가자 코드가 서로 다릅니다: {people} (지정: {args.participant})")
+    print(f"파일 확인 중: {args.output}/{args.participant}")
+    data = load_demo_data(args.participant, args.output, args.existing)
 
     # 2) 하나의 트랜잭션으로 저장
     from app.database import engine  # .env 를 읽어 DB 에 접속하는 서버의 engine
 
     with engine.begin() as conn:
-        user_id = report.save_report(conn, args.login_id, report_rows)
-        existing.save_products(conn, args.login_id, owned)
-        design.save(conn, args.login_id, recs, gaps)
+        user_id = save_demo_data(conn, args.login_id, data)
 
-    print(f"\n저장 완료: {participant} → 회원 {args.login_id} (users.id={user_id})")
-    print(f"  - 건강 리포트   질병 {len(report_rows)}개")
-    print(f"  - 보유 보험     상품 {len(owned)}개 · 보장 {sum(len(p['coverages']) for p in owned)}개")
-    print(f"  - 추천 보험     상품 {len(recs)}개 · 보장 {sum(len(p['coverages']) for p in recs)}개")
-    print(f"  - 보장 공백     질병 {len(gaps)}개")
+    print(f"\n저장 완료: {data['participant']} → 회원 {args.login_id} (users.id={user_id})")
+    print(f"  - 건강 리포트   질병 {len(data['report'])}개")
+    print(f"  - 보유 보험     상품 {len(data['owned'])}개 · 보장 {sum(len(p['coverages']) for p in data['owned'])}개")
+    print(f"  - 추천 보험     상품 {len(data['recs'])}개 · 보장 {sum(len(p['coverages']) for p in data['recs'])}개")
+    print(f"  - 보장 공백     질병 {len(data['gaps'])}개")
 
 
 if __name__ == "__main__":

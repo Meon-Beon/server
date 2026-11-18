@@ -92,7 +92,8 @@ def login(body: LoginRequest, db: Connection = Depends(get_db)):
 
     # 아이디가 없거나 비밀번호가 틀리면 로그인 실패 -> 401 Unauthorized
     # (둘 중 무엇이 틀렸는지는 알려주지 않는다)
-    if row is None or not verify_password(body.password, row["password"]):
+    # 카카오 회원은 비밀번호가 NULL → 아이디·비밀번호로는 로그인할 수 없음
+    if row is None or row["password"] is None or not verify_password(body.password, row["password"]):
         raise HTTPException(
             status_code=401, detail="아이디 또는 비밀번호가 올바르지 않습니다."
         )
