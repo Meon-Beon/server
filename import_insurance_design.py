@@ -9,6 +9,7 @@
 - 추천보험_longform.csv        : 추천 상품과 보장 목록 (보장 1개 = 1행) ← 상품·보장의 기준
 - insurance_recommendations.csv : 상품별 추천순위·보험료·대상질병·추천이유 (longform 에 없는 값만 가져옴)
 - insurance_coverage_gaps.csv   : 질병별 보장 공백 점검
+그리고 두 단계 위 폴더의 보험상품_wideform.csv(통합 상품 DB)에서 추천 상품의 가입URL 을 찾아 붙인다
 
 - DB 접속 정보는 서버와 같은 server/.env 를 쓴다 (app/database.py 의 engine)
 - 처음 한 번은 MySQL Workbench에서 sql/insurance_design.sql 을 실행해 테이블을 만들어 둬야 한다
@@ -25,6 +26,8 @@ from sqlalchemy import Connection, text
 LONGFORM = "추천보험_longform.csv"
 RECOMMENDATIONS = "insurance_recommendations.csv"
 GAPS = "insurance_coverage_gaps.csv"
+# 통합 상품 DB. 기본 위치는 결과 폴더(new_try/portfolio_output/<참가자>)의 두 단계 위 = new_try/보험상품_wideform.csv
+PRODUCT_DB = "보험상품_wideform.csv"
 
 LONGFORM_REQUIRED = {"보험구분", "회사명", "상품명", "보장명", "보장내용", "보장금액", "보험종류"}
 REC_REQUIRED = {"participant", "추천순위", "회사명", "상품명", "보험료", "보험료기준", "가입연령",
@@ -35,10 +38,10 @@ INSERT_REC = text(
     """
     INSERT INTO user_recommendation
         (user_id, participant, rec_rank, company_name, product_name, insurer_type, product_type,
-         premium, premium_basis, join_age, target_diseases, reason, checks, fit_status)
+         premium, premium_basis, join_age, target_diseases, reason, checks, fit_status, join_url)
     VALUES
         (:user_id, :participant, :rec_rank, :company_name, :product_name, :insurer_type, :product_type,
-         :premium, :premium_basis, :join_age, :target_diseases, :reason, :checks, :fit_status)
+         :premium, :premium_basis, :join_age, :target_diseases, :reason, :checks, :fit_status, :join_url)
     """
 )
 INSERT_COVERAGE = text(
@@ -88,7 +91,26 @@ def to_int(value: str, label: str) -> int | None:
         raise ValueError(f"{label} {value!r} 가 숫자가 아닙니다.") from e
 
 
-def read_products(folder: Path) -> tuple[str, list[dict]]:
+def read_join_urls(path: Path) -> dict[tuple[str, str], str]:
+    """통합 상품 DB 에서 (회사명, 상품명) → 가입URL. 파일이나 열이 없으면 빈 dict (URL 없이 진행)"""
+    if not path.exists():
+        print(f"참고: {path} 가 없어 가입 URL 없이 넣습니다.")
+        return {}
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if "가입URL" not in (reader.fieldnames or []):
+            print(f"참고: {path.name} 에 가입URL 열이 없어 가입 URL 없이 넣습니다.")
+            return {}
+        urls = {}
+        for r in reader:
+            url = (r["가입URL"] or "").strip()
+            # http(s) 주소만 저장 ("ㅡ" 같은 빈칸 표시나 javascript: 같은 위험한 주소는 버림)
+            if url.lower().startswith(("http://", "https://")):
+                urls[((r["회사명"] or "").strip(), (r["상품명"] or "").strip())] = url
+    return urls
+
+
+def read_products(folder: Path, product_db: Path | None = None) -> tuple[str, list[dict]]:
     """longform 을 상품별로 묶고, 같은 (회사명, 상품명)의 추천 정보를 붙인다. (참가자 코드, 상품 목록) 반환"""
     longform = read_csv(folder / LONGFORM, LONGFORM_REQUIRED)
     recs = read_csv(folder / RECOMMENDATIONS, REC_REQUIRED)
@@ -99,6 +121,7 @@ def read_products(folder: Path) -> tuple[str, list[dict]]:
     participant = participants.pop()
 
     rec_by_key = {(r["회사명"], r["상품명"]): r for r in recs}
+    join_urls = read_join_urls(product_db or folder.parent.parent / PRODUCT_DB)
 
     # dict 는 넣은 순서를 지키므로 longform 에 처음 나온 순서대로 상품이 쌓인다
     products: dict[tuple[str, str], dict] = {}
@@ -144,6 +167,7 @@ def read_products(folder: Path) -> tuple[str, list[dict]]:
                 # 확인필요사항 끝에 붙은 " / " 같은 빈 구분자는 떼어 냄
                 "checks": blank(r["확인필요사항"].strip(" /")),
                 "fit_status": blank(r["적합성상태"]),
+                "join_url": join_urls.get(key),
             }
         )
     result.sort(key=lambda p: p["rec_rank"])
