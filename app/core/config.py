@@ -7,16 +7,32 @@ from sqlalchemy.engine import URL
 # server/.env 파일의 값을 환경변수로 읽어온다
 load_dotenv()
 
-# URL.create를 쓰면 비밀번호에 @, # 같은 특수문자가 있어도 안전하게 처리된다
-DATABASE_URL = URL.create(
-    drivername="mysql+pymysql",
-    username=os.getenv("DB_USER", "root"),
-    password=os.getenv("DB_PASSWORD", ""),
-    host=os.getenv("DB_HOST", "localhost"),
-    port=int(os.getenv("DB_PORT", "3306")),
-    database=os.getenv("DB_NAME", "gene_insurance"),
-    query={"charset": "utf8mb4"},
-)
+def _database_url():
+    """DATABASE_URL 이 있으면 그 주소(배포: Supabase PostgreSQL), 없으면 DB_* 값으로 로컬 MySQL"""
+    url = os.getenv("DATABASE_URL", "").strip()
+    if url:
+        # Supabase 가 주는 postgres:// · postgresql:// 주소를 SQLAlchemy 의 psycopg(3) 드라이버용으로 바꿈
+        for prefix in ("postgres://", "postgresql://"):
+            if url.startswith(prefix):
+                return "postgresql+psycopg://" + url[len(prefix):]
+        return url
+    # URL.create를 쓰면 비밀번호에 @, # 같은 특수문자가 있어도 안전하게 처리된다
+    return URL.create(
+        drivername="mysql+pymysql",
+        username=os.getenv("DB_USER", "root"),
+        password=os.getenv("DB_PASSWORD", ""),
+        host=os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT", "3306")),
+        database=os.getenv("DB_NAME", "gene_insurance"),
+        query={"charset": "utf8mb4"},
+    )
+
+
+DATABASE_URL = _database_url()
+
+# 프론트 주소 (CORS 허용 목록). 배포하면 Vercel 프론트 주소를 쉼표로 이어서 넣는다
+# 예) CORS_ORIGINS=http://localhost:5173,https://gene-xxx.vercel.app
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
 # 토스페이먼츠 시크릿 키 (결제 승인 API용, 서버에서만 사용)
 # .env에 TOSS_SECRET_KEY가 없으면 토스 문서 공개용 테스트 키를 쓴다.

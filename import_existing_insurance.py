@@ -19,6 +19,8 @@ from pathlib import Path
 
 from sqlalchemy import Connection, text
 
+from app.database import insert_returning_id
+
 REQUIRED = {"participant", "회사명", "상품명", "보장정보", "보험료", "특성정보"}
 
 INSERT_PRODUCT = text(
@@ -129,8 +131,8 @@ def save_products(conn: Connection, login_id: str, products: list[dict]) -> int:
 
     for p in products:
         product_row = {k: v for k, v in p.items() if k not in ("coverages", "features")}
-        result = conn.execute(INSERT_PRODUCT, {**product_row, "user_id": user_id})
-        insurance_id = result.lastrowid  # 방금 넣은 상품 행의 id (AUTO_INCREMENT 값)
+        # 방금 넣은 상품 행의 id (MySQL 은 lastrowid, PostgreSQL 은 RETURNING id 로 받음)
+        insurance_id = insert_returning_id(conn, INSERT_PRODUCT, {**product_row, "user_id": user_id})
 
         # 리스트를 넘기면 같은 INSERT 를 행마다 실행한다 (executemany)
         if p["coverages"]:
