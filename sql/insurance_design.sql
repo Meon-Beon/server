@@ -3,6 +3,7 @@
 --   추천보험_longform.csv        → 추천 상품과 보장 목록 (보장 1개 = 1행)
 --   insurance_recommendations.csv → 상품별 추천순위·보험료·대상질병·추천이유 (longform 에 없는 값만 가져옴)
 --   insurance_coverage_gaps.csv   → 질병별 보장 공백 점검
+--   ../../보험상품_wideform.csv     → 추천 상품의 가입URL (회사명+상품명으로 찾음)
 -- 테이블만 만든다. 데이터는 server 폴더에서 import_insurance_design.py 로 넣는다
 --   python import_insurance_design.py "<결과 폴더 경로>" <login_id>
 -- 다시 실행하면 세 테이블을 지우고 새로 만든다 (들어 있던 데이터도 지워짐)
@@ -29,6 +30,7 @@ CREATE TABLE user_recommendation (
     reason           TEXT         NULL,              -- 추천이유
     checks           TEXT         NULL,              -- 확인필요사항
     fit_status       VARCHAR(100) NULL,              -- 적합성상태
+    join_url         VARCHAR(500) NULL,              -- 가입 페이지 주소 (new_try/보험상품_wideform.csv 의 가입URL, 없으면 NULL)
     created_at       DATETIME     DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_recommendation (user_id, company_name, product_name),
     CONSTRAINT fk_user_recommendation_user FOREIGN KEY (user_id) REFERENCES users (id)

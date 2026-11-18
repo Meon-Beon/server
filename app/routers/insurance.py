@@ -124,7 +124,7 @@ def get_insurance_design(user_id: int, db: Connection = Depends(get_db)):
             text(
                 """
                 SELECT id, rec_rank, company_name, product_name, insurer_type, product_type,
-                       premium, premium_basis, join_age, target_diseases, reason, checks, fit_status
+                       premium, premium_basis, join_age, target_diseases, reason, checks, fit_status, join_url
                 FROM user_recommendation
                 WHERE user_id = :user_id
                 ORDER BY rec_rank
