@@ -5,7 +5,7 @@
 상품 DB: 보험상품_wideform.csv, 보험상품_longform.csv (이 두 파일만 사용)
 .env: CLAUDE_API_KEY=... / CLAUDE_DEFAULT_MODEL=claude-haiku-4-5
 1: 화면용 경어체 13열 health_portfolio_long.csv 생성. 원본 문구는 JSON에 별도 보존.
-2: 위험·공백 점검 -> wideform 보장정보 RAG -> 전체 최대 5개 상품 선정 ->
+2: 위험·공백 점검 -> wideform 보장정보 RAG -> 보험 상품 선정 ->
    회사명·상품명으로 원본 두 테이블을 조회해 추천보험_wideform.csv/추천보험_longform.csv 생성.
 결과: portfolio_output/participant 폴더. 잠긴 출력 파일은 시간표시가 붙은 새 이름으로 저장.
 보험설계 모드에서는 포트폴리오 CSV를 다시 생성/덮어쓰지 않는다.
@@ -204,8 +204,8 @@ SYSTEM += '''
 새 화면의 표시 항목을 반드시 구분한다.
 health_measurements: 건강검진근거에 실제로 기재된 검사명·수치·단위를 포함하는 원문 부분문자열 목록.
 원문을 그대로 복사하고, 단위를 추가하거나 수치를 환산하지 않는다. 없으면 빈 목록.
-health_finding: 건강검진근거의 상태·소견을 쉽게 요약. DNA근거를 섞지 않는다. 없으면 '판정소견 정보 없음'.
-health_summary: DNA 카드의 '검진' 줄과 통합 카드에 사용할 검진 상태 요약. 없으면 '관련 검진 정보 없음'.
+health_finding: 건강검진근거의 상태·소견을 쉽게 요약. DNA근거를 섞지 않는다. 없으면 '판정소견 정보가 불충분합니다'.
+health_summary: DNA 카드의 '검진' 줄과 통합 카드에 사용할 검진 상태 요약. 없으면 '관련 검진 정보가 없습니다'.
 dna_summary: DNA근거에 있는 유전적 특징만 요약. SNP/유전자명이 원문에 없으면 만들지 않는다.
 없으면 '유전적 특징에 대한 근거 정보 없음'. 분류만 있으면 원본 위험군만 언급한다.
 summary: 통합 카드 오른쪽 설명. 두 출처를 구별하고 모순/한계를 명시한다.
@@ -291,11 +291,11 @@ def screen_fields(row, narrative):
     narrative = narrative or {}
     measurements = narrative.get('health_measurements',[])
     return {
-        '검진수치':' · '.join(measurements) if measurements else '검진수치 정보 없음',
+        '검진수치':' · '.join(measurements) if measurements else '검진수치 정보가 없습니다',
         '검진수치원문목록':measurements,
-        '판정소견':narrative.get('health_finding') or row['건강검진근거'] or '판정소견 정보 없음',
-        '검진':narrative.get('health_summary') or row['건강검진근거'] or '관련 검진 정보 없음',
-        'DNA':narrative.get('dna_summary') or row['DNA근거'] or '유전적 특징에 대한 근거 정보 없음',
+        '판정소견':narrative.get('health_finding') or row['건강검진근거'] or '판정소견 정보가 없습니다',
+        '검진':narrative.get('health_summary') or row['건강검진근거'] or '관련 검진 정보가 없습니다',
+        'DNA':narrative.get('dna_summary') or row['DNA근거'] or '유전적 특징에 대한 근거 정보가 없습니다',
         '통합설명':narrative.get('summary') or 'LLM 통합설명 미생성. 출처별 근거를 확인하세요.',
         '보험검토관점':narrative.get('insurance_focus',''),
         '주의사항':[x for x in [row['건강검진분석한계'],row['DNA분석한계'],*row['데이터주의사항']] if x],
@@ -615,9 +615,11 @@ DESIGN_PROMPT='''당신은 보험 보장 점검 보조자다. 제공된 계약 �
 일반암의 대장암 포함, 여성유방암과 남성유방암, 치매진단과 장기요양등급은 문구의 차이를 구별한다.
 source_ids에는 제공된 문서 ID만 선택한다. 인용문은 프로그램이 원문을 붙이므로 재작성하지 않는다.
 보장확인/추천에는 근거ID 필수. 없는 보장을 인용할 수 없으므로 공백의심에는 빈 ID 배열 허용.
-기존 가입 상품의 중복 가입/해지를 권하지 않는다. DB 보험료는 남자40세 등 예시 조건이며 실제 견적 아님.
+기존 가입 상품의 중복 가입/해지를 권하지 않는다. DB 보험료는 실제 견적 아니므로 실제와 달라질 수 있다.
 상품명만으로 적합성을 정하지 않는다. 감액/면책/지급횟수/갱신/특약조건을 읽고 제한을 적는다.
-보장 정의나 가입 가능성을 확인할 수 없으면 한계를 명시한다. 근거 없는 후보로 5개를 채우지 않는다.'''
+보장 정의나 가입 가능성을 확인할 수 없으면 한계를 명시한다. 근거 없는 후보로 추천 상품을 채우지 않는다.
+기존 가지고 있던 보험의 보장 공백을 고려하여 추천 상품을 10개 내외로 선정한다. 이때, 추천되는 상품을 모두 추가한다면 모든 보장 공백이 해결되어야 한다.
+만약 하나의 공백에 대해 채워줄 수 있는 추천 보험이 매우 많다면, 그 공백에 대해 추천하는 보험은 3~4개로 제한한다.'''
 
 
 def ask_tool(client,model,payload,schema):
@@ -647,7 +649,7 @@ def excluded_products(products,contracts,age):
 
 
 def design_insurance(portfolio,existing_df,product_dir='.',*,client=None,model=None,
-                     confirmed_uninsured=False,top_n=5):
+                     confirmed_uninsured=False,top_n=10):
     participant=portfolio['participant'];rows=portfolio['disease_rows']
     client=get_client(client);model=model or os.getenv('CLAUDE_DEFAULT_MODEL',MODEL)
     contracts=existing_contracts(existing_df,participant,confirmed_uninsured=confirmed_uninsured)
