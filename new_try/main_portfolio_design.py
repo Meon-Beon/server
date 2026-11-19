@@ -561,7 +561,8 @@ def load_product_db(folder):
             if signature in seen: continue
             seen.add(signature)
             docs.append({'문서ID':f'W{len(docs)+1}','상품키':key,**fields,
-                '검색본문':fields['보장명']+' '+fields['보장내용'],
+                # 보험종류(치매/암/질병/상해)도 함께 검색: 보장 문구에 '치매'가 없어도 치매 상품이 후보에 오르게
+                '검색본문':fields['보장명']+' '+fields['보장내용']+' '+category,
                 '본문':' / '.join(f'{k}: {v}' for k,v in fields.items()),
                 '출처':f'{wide_path.name}:데이터행{n}:보장정보[{i-1}]'})
     if not docs: raise ValueError('wideform 보장정보에 검색 가능한 보장 문구가 없습니다.')
@@ -612,7 +613,8 @@ DESIGN_PROMPT='''당신은 보험 보장 점검 보조자다. 제공된 계약 �
 실손 치료비/입원일당/수술비/진단비는 같은 보장이 아니다. 금액 목표가 없으므로 금액 부족을 확정하지 않는다.
 계약에 문구가 안 보이면 공백의심 또는 정보부족이며 미보장을 확정하지 않는다.
 단순한 질병명 검색 결과만으로 보장을 확정하지 않는다. 상해사망/골절은 질병 진단을 보장하지 않는다.
-일반암의 대장암 포함, 여성유방암과 남성유방암, 치매진단과 장기요양등급은 문구의 차이를 구별한다.
+일반암의 대장암 포함, 여성유방암과 남성유방암은 문구의 차이를 구별한다.
+추천 상품 선정 시 치매: 보장명이나 보장내용에 '간병' 또는 '장기요양'이 들어간 보장이 있으면 치매 대비 보장으로 보고 diseases에 치매를 넣어 추천한다. 단, 치매 진단비가 아니면 limitations에 '치매 진단비가 아닌 간병/장기요양 보장'임을 적는다.
 source_ids에는 제공된 문서 ID만 선택한다. 인용문은 프로그램이 원문을 붙이므로 재작성하지 않는다.
 보장확인/추천에는 근거ID 필수. 없는 보장을 인용할 수 없으므로 공백의심에는 빈 ID 배열 허용.
 기존 가입 상품의 중복 가입/해지를 권하지 않는다. DB 보험료는 실제 견적 아니므로 실제와 달라질 수 있다.
@@ -741,7 +743,13 @@ def design_insurance(portfolio,existing_df,product_dir='.',*,client=None,model=N
                 if key is None: raise ValueError('미제공 상품 ID')
                 product=products[key];dedup=(product['회사명'],product['상품명'])
                 if dedup in used: raise ValueError('동일 상품 중복')
-                if not rec['diseases'] or not set(rec['diseases'])<=set(target_diseases): raise ValueError('공백 대상이 아닌 질병')
+                # 공백 대상이 아닌 질병(예: 유방암)이 섞여 있으면 그 질병만 빼고 상품은 살린다.
+                # (예전엔 하나만 섞여도 상품 전체를 버려서 추천 수가 줄었음) 남는 질병이 없을 때만 제외
+                valid=[d for d in rec['diseases'] if d in target_diseases]
+                if not valid: raise ValueError('공백 대상이 아닌 질병')
+                if len(valid)<len(rec['diseases']):
+                    rejected.append(f"{alias}: 대상 아닌 질병 제외 {sorted(set(rec['diseases'])-set(valid))}")
+                rec['diseases']=valid
                 refs=attach_source_quotes(rec['source_ids'],lookup,product_id=alias,required=True)
                 chosen=[lookup[id_] for id_ in rec['source_ids']]
                 meta=product['메타데이터'];used.add(dedup)
