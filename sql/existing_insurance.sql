@@ -6,6 +6,8 @@
 USE gene_insurance;
 
 -- 자식 테이블부터 지워야 외래키 오류가 나지 않는다
+-- (리포트에 넣은 기존 보험 기록도 이 테이블을 참조하므로 먼저 지움. insurance_design.sql 을 다시 실행하면 새로 생김)
+DROP TABLE IF EXISTS user_saved_report_owned;
 DROP TABLE IF EXISTS user_insurance_feature;
 DROP TABLE IF EXISTS user_insurance_coverage;
 DROP TABLE IF EXISTS user_insurance;
