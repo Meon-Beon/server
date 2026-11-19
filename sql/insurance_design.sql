@@ -9,7 +9,9 @@
 -- 다시 실행하면 세 테이블을 지우고 새로 만든다 (들어 있던 데이터도 지워짐)
 USE gene_insurance;
 
-DROP TABLE IF EXISTS user_saved_design;            -- 추천 상품을 참조하므로 가장 먼저
+DROP TABLE IF EXISTS user_saved_report_item;       -- 추천 상품을 참조하므로 가장 먼저
+DROP TABLE IF EXISTS user_saved_report;
+DROP TABLE IF EXISTS user_saved_design;            -- 예전 "회원당 설계 1개" 테이블 (이제 안 씀)
 DROP TABLE IF EXISTS user_recommendation_coverage;
 DROP TABLE IF EXISTS user_recommendation;
 DROP TABLE IF EXISTS user_coverage_gap;
@@ -66,16 +68,26 @@ CREATE TABLE user_coverage_gap (
     CONSTRAINT fk_user_coverage_gap_user FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
--- 회원이 보험설계 화면에서 "설계 저장"한 추천 상품 (회원당 설계 1개, 저장하면 덮어씀)
--- 마이페이지 > 보험 설계 보러가기 에서 보여 준다
--- 추천 상품을 다시 적재(import_insurance_design.py / seed_demo.py)하면 CASCADE 로 저장한 설계도 지워진다
-CREATE TABLE user_saved_design (
-    user_id           INT      NOT NULL,          -- users.id
-    recommendation_id INT      NOT NULL,          -- user_recommendation.id
-    sort_order        TINYINT  NOT NULL,          -- 설계 칸에 담은 순서
-    saved_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, recommendation_id),
-    CONSTRAINT fk_user_saved_design_user FOREIGN KEY (user_id) REFERENCES users (id),
-    CONSTRAINT fk_user_saved_design_rec FOREIGN KEY (recommendation_id)
+-- 저장한 보험 설계 리포트: 보험설계 화면에서 "리포트로 저장"을 한 번 누를 때마다 한 행 (회원당 여러 개)
+-- 마이페이지 > 보험 설계 보러가기 에서 옆으로 넘겨 보는 카드 하나가 리포트 하나
+CREATE TABLE user_saved_report (
+    id       INT AUTO_INCREMENT PRIMARY KEY,
+    user_id  INT      NOT NULL,                   -- users.id
+    saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_user_saved_report_user (user_id, saved_at),
+    CONSTRAINT fk_user_saved_report_user FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- 리포트에 담은 추천 상품: 리포트 하나 × 상품 하나 = 한 행 (리포트 1 : N 상품)
+-- 리포트를 지우면 담은 상품 행도 함께 지워진다 (CASCADE)
+-- 추천 상품을 다시 적재(import_insurance_design.py / seed_demo.py)하면 이 행도 지워지고, 상품이 하나도 없는 리포트는 화면에 나오지 않는다
+CREATE TABLE user_saved_report_item (
+    report_id         INT     NOT NULL,           -- user_saved_report.id
+    recommendation_id INT     NOT NULL,           -- user_recommendation.id
+    sort_order        TINYINT NOT NULL,           -- 설계 칸에 담은 순서
+    PRIMARY KEY (report_id, recommendation_id),
+    CONSTRAINT fk_user_saved_report_item_report FOREIGN KEY (report_id)
+        REFERENCES user_saved_report (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_saved_report_item_rec FOREIGN KEY (recommendation_id)
         REFERENCES user_recommendation (id) ON DELETE CASCADE
 );

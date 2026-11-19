@@ -13,7 +13,7 @@
 --
 -- 다시 실행하면 모든 테이블을 지우고 새로 만든다 (데이터도 지워짐) → 다시 넣으려면 python seed_demo.py
 
-DROP TABLE IF EXISTS user_saved_design, user_recommendation_coverage, user_recommendation, user_coverage_gap,
+DROP TABLE IF EXISTS user_saved_report_item, user_saved_report, user_saved_design, user_recommendation_coverage, user_recommendation, user_coverage_gap,
     user_insurance_feature, user_insurance_coverage, user_insurance,
     report_diseases, health_checkups, dna_orders, users CASCADE;
 
@@ -167,13 +167,20 @@ CREATE TABLE user_coverage_gap (
     CONSTRAINT uq_user_coverage_gap UNIQUE (user_id, disease)
 );
 
--- ---------- 저장한 보험 설계 (회원당 1개, 저장하면 덮어씀. 마이페이지에서 보여 줌) ----------
-CREATE TABLE user_saved_design (
-    user_id           INT       NOT NULL REFERENCES users (id),
-    recommendation_id INT       NOT NULL REFERENCES user_recommendation (id) ON DELETE CASCADE,
-    sort_order        SMALLINT  NOT NULL,
-    saved_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, recommendation_id)
+-- ---------- 저장한 보험 설계 리포트 ("리포트로 저장" 1번 = 리포트 1개, 회원당 여러 개. 마이페이지에서 보여 줌) ----------
+CREATE TABLE user_saved_report (
+    id       INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id  INT       NOT NULL REFERENCES users (id),
+    saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_user_saved_report_user ON user_saved_report (user_id, saved_at);
+
+-- 리포트에 담은 추천 상품 (리포트 1 : N 상품). 리포트나 추천 상품을 지우면 함께 지워진다
+CREATE TABLE user_saved_report_item (
+    report_id         INT      NOT NULL REFERENCES user_saved_report (id) ON DELETE CASCADE,
+    recommendation_id INT      NOT NULL REFERENCES user_recommendation (id) ON DELETE CASCADE,
+    sort_order        SMALLINT NOT NULL,
+    PRIMARY KEY (report_id, recommendation_id)
 );
 
 -- ---------- 보안: Supabase 공개 API(Data API) 로 테이블이 노출되지 않게 ----------
@@ -190,4 +197,5 @@ ALTER TABLE user_insurance_feature       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_recommendation          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_recommendation_coverage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_coverage_gap            ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_saved_design            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_saved_report            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_saved_report_item       ENABLE ROW LEVEL SECURITY;
