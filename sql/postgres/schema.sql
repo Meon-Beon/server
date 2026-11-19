@@ -13,7 +13,7 @@
 --
 -- 다시 실행하면 모든 테이블을 지우고 새로 만든다 (데이터도 지워짐) → 다시 넣으려면 python seed_demo.py
 
-DROP TABLE IF EXISTS user_saved_report_item, user_saved_report, user_saved_design, user_recommendation_coverage, user_recommendation, user_coverage_gap,
+DROP TABLE IF EXISTS user_saved_report_owned, user_saved_report_item, user_saved_report, user_saved_design, user_recommendation_coverage, user_recommendation, user_coverage_gap,
     user_insurance_feature, user_insurance_coverage, user_insurance,
     report_diseases, health_checkups, dna_orders, users CASCADE;
 
@@ -183,6 +183,14 @@ CREATE TABLE user_saved_report_item (
     PRIMARY KEY (report_id, recommendation_id)
 );
 
+-- 리포트에 함께 넣은 기존 가입 보험 (리포트 1 : N 기존 보험). (−)로 뺀 기존 보험은 들어가지 않음
+CREATE TABLE user_saved_report_owned (
+    report_id    INT      NOT NULL REFERENCES user_saved_report (id) ON DELETE CASCADE,
+    insurance_id INT      NOT NULL REFERENCES user_insurance (id) ON DELETE CASCADE,
+    sort_order   SMALLINT NOT NULL,
+    PRIMARY KEY (report_id, insurance_id)
+);
+
 -- ---------- 보안: Supabase 공개 API(Data API) 로 테이블이 노출되지 않게 ----------
 -- Supabase 는 public 스키마 테이블을 브라우저용 REST API 로 자동 공개한다.
 -- RLS(행 단위 보안)를 켜고 정책을 하나도 만들지 않으면 그 API 로는 아무것도 읽고 쓸 수 없다.
@@ -199,3 +207,4 @@ ALTER TABLE user_recommendation_coverage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_coverage_gap            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_saved_report            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_saved_report_item       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_saved_report_owned      ENABLE ROW LEVEL SECURITY;

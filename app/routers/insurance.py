@@ -230,6 +230,42 @@ def load_reports(db: Connection, user_id: int, report_id: int | None = None) -> 
     for rep in reports.values():
         for p in rep["products"]:
             p["coverages"] = coverages[p["id"]]
+        rep["owned"] = []
+        rep["owned_total"] = 0
+
+    # 리포트에 함께 넣은 기존 가입 보험 (보험설계 화면에서 (−)로 뺀 것은 저장되지 않음)
+    if reports:
+        owned_rows = [
+            dict(r)
+            for r in db.execute(
+                text(
+                    """
+                    SELECT o.report_id, i.id, i.company_name, i.product_name, i.premium
+                    FROM user_saved_report_owned o
+                    JOIN user_insurance i ON i.id = o.insurance_id
+                    WHERE o.report_id IN :ids
+                    ORDER BY o.report_id, o.sort_order
+                    """
+                ).bindparams(bindparam("ids", expanding=True)),
+                {"ids": list(reports)},
+            ).mappings()
+        ]
+        # 카테고리(암, 상해 …)는 보유 보험 화면과 같은 규칙으로 보장명에서 뽑음
+        owned_cov: dict[int, list[dict]] = {}
+        owned_ids = list({o["id"] for o in owned_rows})
+        if owned_ids:
+            for c in db.execute(
+                text(
+                    "SELECT insurance_id, coverage_name FROM user_insurance_coverage WHERE insurance_id IN :ids"
+                ).bindparams(bindparam("ids", expanding=True)),
+                {"ids": owned_ids},
+            ).mappings():
+                owned_cov.setdefault(c["insurance_id"], []).append(dict(c))
+        for o in owned_rows:
+            rep = reports[o.pop("report_id")]
+            o["categories"] = count_categories(owned_cov.get(o["id"], []))
+            rep["owned"].append(o)
+            rep["owned_total"] += o["premium"]
 
     return list(reports.values())
 
@@ -244,6 +280,8 @@ def get_reports(user_id: int, db: Connection = Depends(get_db)):
 class SaveReportRequest(BaseModel):
     # 설계 칸에 담은 순서대로. 빈 리포트는 만들지 않음
     recommendation_ids: list[int] = Field(min_length=1, max_length=20)
+    # 합계에 넣은 기존 가입 보험 (화면에서 (−)로 뺀 것은 빼고 보냄)
+    owned_insurance_ids: list[int] = Field(default_factory=list, max_length=20)
 
 
 @router.post("/reports/{user_id}", status_code=201)
@@ -262,6 +300,20 @@ def create_report(user_id: int, body: SaveReportRequest, db: Connection = Depend
     )
     if mine != set(ids):
         raise HTTPException(status_code=400, detail="저장할 수 없는 상품이 포함돼 있어요. 화면을 새로고침해 주세요.")
+
+    # 기존 가입 보험도 이 회원 것인지 확인
+    owned_ids = list(dict.fromkeys(body.owned_insurance_ids))
+    if owned_ids:
+        mine_owned = set(
+            db.execute(
+                text("SELECT id FROM user_insurance WHERE user_id = :user_id AND id IN :ids").bindparams(
+                    bindparam("ids", expanding=True)
+                ),
+                {"user_id": user_id, "ids": owned_ids},
+            ).scalars()
+        )
+        if mine_owned != set(owned_ids):
+            raise HTTPException(status_code=400, detail="저장할 수 없는 기존 보험이 포함돼 있어요. 화면을 새로고침해 주세요.")
 
     count = db.execute(
         text("SELECT COUNT(*) FROM user_saved_report WHERE user_id = :user_id"), {"user_id": user_id}
@@ -282,6 +334,16 @@ def create_report(user_id: int, body: SaveReportRequest, db: Connection = Depend
         ),
         [{"report_id": report_id, "rid": rid, "sort_order": i} for i, rid in enumerate(ids, start=1)],
     )
+    if owned_ids:
+        db.execute(
+            text(
+                """
+                INSERT INTO user_saved_report_owned (report_id, insurance_id, sort_order)
+                VALUES (:report_id, :iid, :sort_order)
+                """
+            ),
+            [{"report_id": report_id, "iid": iid, "sort_order": i} for i, iid in enumerate(owned_ids, start=1)],
+        )
     db.commit()
     return load_reports(db, user_id, report_id)[0]
 

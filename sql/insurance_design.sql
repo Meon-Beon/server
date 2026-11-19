@@ -9,6 +9,7 @@
 -- 다시 실행하면 세 테이블을 지우고 새로 만든다 (들어 있던 데이터도 지워짐)
 USE gene_insurance;
 
+DROP TABLE IF EXISTS user_saved_report_owned;      -- 리포트·기존 보험을 참조
 DROP TABLE IF EXISTS user_saved_report_item;       -- 추천 상품을 참조하므로 가장 먼저
 DROP TABLE IF EXISTS user_saved_report;
 DROP TABLE IF EXISTS user_saved_design;            -- 예전 "회원당 설계 1개" 테이블 (이제 안 씀)
@@ -90,4 +91,17 @@ CREATE TABLE user_saved_report_item (
         REFERENCES user_saved_report (id) ON DELETE CASCADE,
     CONSTRAINT fk_user_saved_report_item_rec FOREIGN KEY (recommendation_id)
         REFERENCES user_recommendation (id) ON DELETE CASCADE
+);
+
+-- 리포트에 함께 넣은 기존 가입 보험 (리포트 1 : N 기존 보험). 보험설계 화면에서 (−)로 뺀 기존 보험은 들어가지 않는다
+-- 리포트를 지우거나 기존 보험을 다시 적재(import_existing_insurance.py)하면 함께 지워진다
+CREATE TABLE user_saved_report_owned (
+    report_id    INT     NOT NULL,                -- user_saved_report.id
+    insurance_id INT     NOT NULL,                -- user_insurance.id
+    sort_order   TINYINT NOT NULL,                -- 화면에 보이던 순서
+    PRIMARY KEY (report_id, insurance_id),
+    CONSTRAINT fk_user_saved_report_owned_report FOREIGN KEY (report_id)
+        REFERENCES user_saved_report (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_saved_report_owned_ins FOREIGN KEY (insurance_id)
+        REFERENCES user_insurance (id) ON DELETE CASCADE
 );
